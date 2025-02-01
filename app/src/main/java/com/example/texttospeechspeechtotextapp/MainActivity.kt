@@ -20,6 +20,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import java.util.Locale
 import android.Manifest
+import kotlin.system.exitProcess
 
 private val RECORD_AUDIO_PERMISSION_CODE = 1
 
@@ -54,6 +55,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+
         textToSpeechBtn.setOnClickListener {
             if (editText.text.toString().trim().isNotEmpty()) {
                 textToSpeech.speak(editText.text.toString().trim(), TextToSpeech.QUEUE_FLUSH, null, null)
@@ -70,6 +72,28 @@ class MainActivity : AppCompatActivity() {
         speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
         checkAndRequestAudioPermission()
 
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+
+        // Stop Speech Recognizer
+        if (::speechRecognizer.isInitialized) {
+            speechRecognizer.destroy()
+        }
+
+        // Shutdown Text-to-Speech
+        if (::textToSpeech.isInitialized) {
+            textToSpeech.stop()
+            textToSpeech.shutdown()
+        }
+
+        // Clear View and Memory
+        window.decorView.rootView.setBackgroundColor(android.graphics.Color.TRANSPARENT)
+
+        // Kill the App Process Completely
+        android.os.Process.killProcess(android.os.Process.myPid())
+        exitProcess(0)
     }
 
     private fun checkAndRequestAudioPermission() {
@@ -149,9 +173,15 @@ class MainActivity : AppCompatActivity() {
     private fun stopListening() {
         // If speech recognition is active, stop/cancel it
         if (::speechRecognizer.isInitialized) {
-            speechRecognizer.stopListening() // Stops the listening
-            speechRecognizer.cancel() // Cancel if needed
+            speechRecognizer.stopListening()
+            speechRecognizer.cancel()
+            speechRecognizer.destroy()
         }
+
+        // Bring app back to the foreground to override the Google UI
+        val intent = Intent(this, MainActivity::class.java)
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        startActivity(intent)
     }
 
 
@@ -160,15 +190,16 @@ class MainActivity : AppCompatActivity() {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true) // Enables partial results
+            flags = Intent.FLAG_ACTIVITY_NO_HISTORY // Ensures it is cleared once dismissed
         }
 
         speechRecognizer.setRecognitionListener(object : RecognitionListener {
-            override fun onReadyForSpeech(params: Bundle?) { printMessage("speech started")  }
+            override fun onReadyForSpeech(params: Bundle?) {}
             override fun onRmsChanged(rmsdB: Float) {}
             override fun onBufferReceived(buffer: ByteArray?) {}
             override fun onEndOfSpeech() { }
 
-            override fun onBeginningOfSpeech() {   printMessage("speech began")    }
+            override fun onBeginningOfSpeech() {   }
 
             override fun onError(error: Int) {
                 // Restart listening if an error occurs (e.g., no speech detected)
@@ -224,8 +255,4 @@ class MainActivity : AppCompatActivity() {
         startKeywordListening() // Restart listening after recognition
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        speechRecognizer.destroy()
-    }
 }
