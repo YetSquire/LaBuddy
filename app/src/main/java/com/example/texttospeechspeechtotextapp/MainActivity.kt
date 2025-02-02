@@ -284,6 +284,7 @@ class MainActivity : AppCompatActivity() {
             stopListening()
             cancelApiCall()
             inputText.text = "Input cancelled"
+            defineImage(null.toString())
             instructionStart(false)
         }
         else if (result.contains(screenOnKeyword, ignoreCase = true)){

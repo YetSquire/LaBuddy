@@ -13,7 +13,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:gravity="center"
-        android:text="Options: (Hello, Cancel) (Wake, Sleep) (Next, Back)"
+        android:text="Options: (Buddy, Cancel) (Wake, Sleep) (Next, Back)"
         android:textColor="@android:color/white"
         android:textSize="15sp" />
 
