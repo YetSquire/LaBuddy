@@ -72,15 +72,21 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+        hideAllUI()
+        showAllUI()
 
         // Initialize continuous speech recognition
         speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
         checkAndRequestAudioPermission()
 
+        countingJob.start()
+
     }
 
     override fun onDestroy() {
         super.onDestroy()
+
+        countingJob.cancel()
 
         // Stop Speech Recognizer
         if (::speechRecognizer.isInitialized) {
@@ -117,6 +123,17 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private var countingJob = GlobalScope.launch(Dispatchers.Main) {
+        while (true){
+            var instr = "Waiting for audio"
+            for (i in 1..3) {
+                delay(500) // Delay for 1 second
+                instr = "$instr."
+                instructionText.text = instr
+            }
+        }
+    }
+
     private fun printMessage(message: String) {
         editText.append(message)
         editText.append(" ")
@@ -131,7 +148,6 @@ class MainActivity : AppCompatActivity() {
 
         // Hide everything by making the overlay visible
         overlayView.visibility = View.VISIBLE
-        instructionInProgress = false
 
     }
 
@@ -159,24 +175,40 @@ class MainActivity : AppCompatActivity() {
                         or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
                 )
     }
+    
+    private fun instructionStart(input: Boolean){
+        instructionInProgress = input
+        if (instructionInProgress) {
+            countingJob.cancel()
+            instructionText.text = "Processing"
+        }
+        else {
+            instructionText.text = "test"
+            countingJob.start()
+        }
+    }
 
     private fun consider (result: String){
         if (result.contains(listenKeyword, ignoreCase = true)) {
-            instructionInProgress = true
+            instructionStart(true)
             startFullSpeechRecognition()
+            instructionStart(false)
         }
         else if (result.contains(screenOffKeyword, ignoreCase = true)) {
-            instructionInProgress = true
+            instructionStart(true)
             hideAllUI()
+            stopListening()
+            instructionStart(false)
         }
         else if (result.contains(doneKeyword, ignoreCase = true)){
-            instructionInProgress = true
+            instructionStart(true)
             stopListening()
+            instructionStart(false)
         }
         else if (result.contains(screenOnKeyword, ignoreCase = true)){
-            instructionInProgress = true
+            instructionStart(true)
             showAllUI()
-            instructionInProgress = false
+            instructionStart(false)
         }
     }
 
@@ -192,7 +224,6 @@ class MainActivity : AppCompatActivity() {
         val intent = Intent(this, MainActivity::class.java)
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         startActivity(intent)
-        instructionInProgress = false
     }
 
 
@@ -243,26 +274,7 @@ class MainActivity : AppCompatActivity() {
             private val delayMillis: Long = 1500 // 500 milliseconds (0.5 second) delay
 
             override fun onRmsChanged(rmsdB: Float) {
-                if (instructionInProgress) {
-                    instructionText.text = "Processing..."
-                    return
-                }
 
-                val currentTime = System.currentTimeMillis()-lastCheckTime
-                if (currentTime < delayMillis) {
-                    if ((currentTime % 500).toInt() == 0) {
-                        instructionText.text = "Waiting for audio."
-                    }
-                    else if ((currentTime % 500).toInt() == 1) {
-                        instructionText.text = "Waiting for audio.."
-                    }
-                    else if ((currentTime % 500).toInt() == 2) {
-                        instructionText.text = "Waiting for audio..."
-                    }
-                    else {
-                        lastCheckTime = System.currentTimeMillis()
-                    }
-                }
             }
 
 
@@ -316,13 +328,14 @@ class MainActivity : AppCompatActivity() {
 //            // Serialize to JSON string
 //            val jsonString = Json.encodeToString(send)
 
-            GlobalScope.launch(Dispatchers.Main) {
-                val output = apiService.getData(userInput = results[0])
-                outputText.text = output.instruction
-            }
+
+            //HERE
+//            GlobalScope.launch(Dispatchers.Main) {
+//                val output = apiService.getData(userInput = results[0])
+//                outputText.text = output.instruction
+//            }
         }
         startKeywordListening() // Restart listening after recognition
-        instructionInProgress = false
     }
 
 }
