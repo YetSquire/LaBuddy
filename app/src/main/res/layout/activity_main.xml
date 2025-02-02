@@ -17,6 +17,15 @@
 
     <!-- Waiting Instructions TextView -->
     <TextView
+        android:layout_width="match_parent"
+        android:layout_height="29dp"
+        android:padding="16dp"
+        android:text="Available instructions: Hello, Exit, Wake, Sleep, Clear"
+        android:textColor="@android:color/white"
+        android:textSize="18sp" />
+
+    <!-- Waiting Instructions TextView -->
+    <TextView
         android:id="@+id/instructionText"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

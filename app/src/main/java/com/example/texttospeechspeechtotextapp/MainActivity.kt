@@ -22,7 +22,6 @@ import android.Manifest
 import kotlin.system.exitProcess
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.encodeToString
 import okhttp3.MediaType.Companion.toMediaType
 import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
@@ -45,9 +44,11 @@ class MainActivity : AppCompatActivity() {
     private lateinit var speechRecognizer: SpeechRecognizer
     private val listenKeyword = "hello"
     private val screenOnKeyword = "wake"
-    private val screenOffKeyword = "clear"
+    private val screenOffKeyword = "sleep"
+    private val clearScreenKeyword = "clear"
     private val doneKeyword = "exit"
     private  var instructionInProgress = false
+    private var countingJob: Job? = null
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -79,14 +80,14 @@ class MainActivity : AppCompatActivity() {
         speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
         checkAndRequestAudioPermission()
 
-        countingJob.start()
+        countingFunc()
 
     }
 
     override fun onDestroy() {
         super.onDestroy()
 
-        countingJob.cancel()
+        countingJob?.cancel()
 
         // Stop Speech Recognizer
         if (::speechRecognizer.isInitialized) {
@@ -123,13 +124,16 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private var countingJob = GlobalScope.launch(Dispatchers.Main) {
-        while (true){
-            var instr = "Waiting for audio"
-            for (i in 1..3) {
-                delay(500) // Delay for 1 second
-                instr = "$instr."
-                instructionText.text = instr
+    private fun countingFunc() {
+        countingJob?.cancel()
+        countingJob = GlobalScope.launch(Dispatchers.Main) {
+            while (true){
+                var instr = "Waiting for audio"
+                for (i in 1..3) {
+                    delay(500) // Delay for 1 second
+                    instr = "$instr."
+                    instructionText.text = instr
+                }
             }
         }
     }
@@ -179,20 +183,29 @@ class MainActivity : AppCompatActivity() {
     private fun instructionStart(input: Boolean){
         instructionInProgress = input
         if (instructionInProgress) {
-            countingJob.cancel()
-            instructionText.text = "Processing"
+            countingJob?.cancel()
+            instructionText.text = ("Processing")
         }
         else {
-            instructionText.text = "test"
-            countingJob.start()
+            countingFunc()
+        }
+    }
+
+    private fun checkListening(input: Boolean){
+        if (input) {
+            countingJob?.cancel()
+            instructionText.text = ("Listening")
+        }
+        else {
+            countingFunc()
         }
     }
 
     private fun consider (result: String){
+        outputText.append(result);
         if (result.contains(listenKeyword, ignoreCase = true)) {
             instructionStart(true)
             startFullSpeechRecognition()
-            instructionStart(false)
         }
         else if (result.contains(screenOffKeyword, ignoreCase = true)) {
             instructionStart(true)
@@ -210,6 +223,17 @@ class MainActivity : AppCompatActivity() {
             showAllUI()
             instructionStart(false)
         }
+        else if (result.contains(clearScreenKeyword, ignoreCase = true)){
+            instructionStart(true)
+            clearScreen()
+            instructionStart(false)
+        }
+
+    }
+
+    private fun clearScreen(){
+        outputText.text = ""
+        editText.text = "Input heard: "
     }
 
     private fun stopListening() {
@@ -217,13 +241,13 @@ class MainActivity : AppCompatActivity() {
         if (::speechRecognizer.isInitialized) {
             speechRecognizer.stopListening()
             speechRecognizer.cancel()
-            speechRecognizer.destroy()
         }
 
         // Bring app back to the foreground to override the Google UI
         val intent = Intent(this, MainActivity::class.java)
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         startActivity(intent)
+        startKeywordListening()
     }
 
 
@@ -231,21 +255,14 @@ class MainActivity : AppCompatActivity() {
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
-            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true) // Enables partial results
             flags = Intent.FLAG_ACTIVITY_NO_HISTORY // Ensures it is cleared once dismissed
         }
 
         speechRecognizer.setRecognitionListener(object : RecognitionListener {
             override fun onReadyForSpeech(params: Bundle?) {}
             override fun onBufferReceived(buffer: ByteArray?) {}
-            override fun onEndOfSpeech() { }
 
-            override fun onBeginningOfSpeech() {   }
-
-            override fun onError(error: Int) {
-                // Restart listening if an error occurs (e.g., no speech detected)
-                startKeywordListening()
-            }
+            override fun onBeginningOfSpeech() { checkListening(true)  }
 
             @SuppressLint("SetTextI18n")
             override fun onResults(results: Bundle?) {
@@ -258,24 +275,36 @@ class MainActivity : AppCompatActivity() {
 
                 startKeywordListening()
             }
-
             override fun onPartialResults(partialResults: Bundle?) {
-                val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                if (matches != null) {
-                    for (result in matches) {
-                        consider(result)
-                    }
+
+            }
+
+            override fun onError(error: Int) {
+                if (error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT ||
+                    error == SpeechRecognizer.ERROR_NO_MATCH ||
+                    error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY) {
+                    startKeywordListening() // Restart if it stops
                 }
-
-                startKeywordListening()
             }
 
-            private var lastCheckTime: Long = System.currentTimeMillis() // To keep track of the last check time
-            private val delayMillis: Long = 1500 // 500 milliseconds (0.5 second) delay
-
-            override fun onRmsChanged(rmsdB: Float) {
-
+            override fun onEndOfSpeech() {
+                checkListening(false)
+               startKeywordListening()
             }
+
+
+//            override fun onPartialResults(partialResults: Bundle?) {
+//                val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+//                if (matches != null) {
+//                    for (result in matches) {
+//                        consider(result)
+//                    }
+//                }
+//
+//                startKeywordListening()
+//            }
+
+            override fun onRmsChanged(rmsdB: Float) {  }
 
 
             override fun onEvent(eventType: Int, params: Bundle?) {}
@@ -292,8 +321,8 @@ class MainActivity : AppCompatActivity() {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 2000)
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 2000)  // Increase the minimum length)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 50)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 50)
         }
 
         result.launch(intent)
@@ -319,9 +348,18 @@ class MainActivity : AppCompatActivity() {
 
     @OptIn(DelicateCoroutinesApi::class)
     private val result = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result: androidx.activity.result.ActivityResult ->
+        instructionStart(false)
         if (result.resultCode == Activity.RESULT_OK) {
             val results = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS) as ArrayList<String>
-            editText.setText("Input heard: " + results[0] + "\n Currently contacting server")
+            if (!results[0].contains("exit")) {
+                editText.setText("Input heard: " + results[0] + "\n Currently contacting server")
+//                GlobalScope.launch(Dispatchers.Main) {
+//                    val output = apiService.getData(userInput = results[0])
+//                    outputText.text = output.instruction
+//                }
+
+            }
+
 
 //            val send = InternalJson(results[0])
 //
@@ -330,10 +368,7 @@ class MainActivity : AppCompatActivity() {
 
 
             //HERE
-//            GlobalScope.launch(Dispatchers.Main) {
-//                val output = apiService.getData(userInput = results[0])
-//                outputText.text = output.instruction
-//            }
+
         }
         startKeywordListening() // Restart listening after recognition
     }
