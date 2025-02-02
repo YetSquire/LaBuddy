@@ -473,6 +473,10 @@ class MainActivity : AppCompatActivity() {
         @GET("?")
         suspend fun getData(
             @Query("query") userInput: String,
+            @Query("query1") query1: String,
+            @Query("answer1") answer1: String,
+            @Query("query2") query2: String,
+            @Query("answer2") answer2: String,
         ): InternalJson
     }
 
@@ -488,7 +492,24 @@ class MainActivity : AppCompatActivity() {
         cancelApiCall()
         apiJob = CoroutineScope(Dispatchers.Main).launch {
             try {
-                val output = apiService.getData(userInput)
+                var q1 = ""
+                var q2 = ""
+                var a1 = ""
+                var a2 = ""
+                if (currPage == 0){
+
+                }
+                else if (currPage == 1){
+                    q1 = myMutableList.get(0).input
+                    a1 = myMutableList.get(0).output
+                }
+                else {
+                    q1 = myMutableList.get(currPage-1).input
+                    a1 = myMutableList.get(currPage-1).output
+                    q2 = myMutableList.get(currPage-2).input
+                    a2 = myMutableList.get(currPage-2).output
+                }
+                val output = apiService.getData(userInput, q1, a1, q2, a2)
                 outputText.text = output.text
 
                 if (output.image.isNotEmpty()) {
