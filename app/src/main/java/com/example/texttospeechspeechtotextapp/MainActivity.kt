@@ -19,6 +19,8 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import java.util.Locale
 import android.Manifest
+import android.content.Context
+import android.os.Environment
 import android.util.Log
 import android.widget.ImageView
 import kotlin.system.exitProcess
@@ -34,8 +36,14 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import coil.load
 import okhttp3.OkHttpClient
+import java.io.File
 import java.util.concurrent.TimeUnit
-
+import com.itextpdf.kernel.pdf.PdfDocument
+import com.itextpdf.kernel.pdf.PdfReader
+import com.itextpdf.kernel.pdf.PdfWriter
+import com.itextpdf.layout.Document
+import com.itextpdf.layout.element.Paragraph
+import com.itextpdf.layout.properties.TextAlignment
 
 private val RECORD_AUDIO_PERMISSION_CODE = 1
 
@@ -66,6 +74,9 @@ class MainActivity : AppCompatActivity() {
     private val doneKeyword = "cancel"
     private val nextKeyword = "next"
     private val backKeyword = "back"
+    private val notesKeyword = "notes"
+    private var notes = false
+
 
     private  var instructionInProgress = false
     private var countingJob: Job? = null
@@ -89,14 +100,14 @@ class MainActivity : AppCompatActivity() {
         overlayView = findViewById<View>(R.id.overlay)
 
         // Initialize TextToSpeech
-        textToSpeech = TextToSpeech(this) { status ->
-            if (status == TextToSpeech.SUCCESS) {
-                val result = textToSpeech.setLanguage(Locale.getDefault())
-                if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
-                    Toast.makeText(this, "Language is not supported", Toast.LENGTH_LONG).show()
-                }
-            }
-        }
+//        textToSpeech = TextToSpeech(this) { status ->
+//            if (status == TextToSpeech.SUCCESS) {
+//                val result = textToSpeech.setLanguage(Locale.getDefault())
+//                if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+//                    Toast.makeText(this, "Language is not supported", Toast.LENGTH_LONG).show()
+//                }
+//            }
+//        }
         hideAllUI()
         showAllUI()
 
@@ -146,6 +157,35 @@ class MainActivity : AppCompatActivity() {
             // Permission already granted, start listening
             startKeywordListening()
         }
+    }
+
+    fun addContentToPDF(input: String) {
+        // Specify your desired directory path
+        val directory = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        val file = File(directory, "notes.pdf")
+
+        if (!file.exists()) {
+            file.createNewFile()
+        }
+
+        // Create a PdfReader for the existing PDF
+        val pdfReader = PdfReader(file)
+
+        // Create a PdfWriter to write the new content
+        val pdfWriter = PdfWriter(file)
+
+        // Create a PdfDocument for the existing file and the writer
+        val pdfDocument = PdfDocument(pdfReader, pdfWriter)
+
+        // Create a Document instance for adding content
+        val document = Document(pdfDocument)
+
+        // Add new content (e.g., a paragraph) to the PDF
+        document.add(Paragraph(input + "\n")
+            .setTextAlignment(TextAlignment.CENTER))
+
+        // Close the document
+        document.close()
     }
 
     private fun countingFunc(input:String) {
@@ -258,6 +298,11 @@ class MainActivity : AppCompatActivity() {
         else if (result.contains(backKeyword, ignoreCase = true)){
             instructionStart(true)
             backChat()
+            instructionStart(false)
+        }
+        else if (result.contains(notesKeyword, ignoreCase = true)){
+            instructionStart(true)
+            addNotes()
             instructionStart(false)
         }
 //        else if (result.contains(clearScreenKeyword, ignoreCase = true)){
@@ -390,6 +435,20 @@ class MainActivity : AppCompatActivity() {
         result.launch(intent)
     }
 
+    private fun addNotes() {
+        showAllUI()
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 50)
+        }
+
+        notes = true
+
+        result.launch(intent)
+    }
+
     val okHttpClient = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)  // Set the connection timeout
         .readTimeout(30, TimeUnit.SECONDS)     // Set the read timeout
@@ -459,7 +518,11 @@ class MainActivity : AppCompatActivity() {
                 instructionInProgress = false
                 countingFunc("\uD83D\uDD52  Waiting for response")
                 instructionInProgress = true
-                makeApiCall(results[0])
+                if (!notes) makeApiCall(results[0])
+                else {
+                    notes = false
+                    addContentToPDF(results[0])
+                }
 
             }
             else {

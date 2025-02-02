@@ -9,11 +9,20 @@
 
     <!-- Waiting Instructions TextView -->
     <TextView
-        android:layout_marginTop="20dp"
+        android:layout_marginTop="10dp"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:gravity="center"
-        android:text="Options: (Hello, Cancel) (Wake, Sleep) (Next, Back)"
+        android:text="Controls: (Buddy, Cancel) (Next, Back)"
+        android:textColor="@android:color/white"
+        android:textSize="15sp" />
+
+    <TextView
+        android:layout_marginTop="25dp"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:text="(Next, Back) (Notes)"
         android:textColor="@android:color/white"
         android:textSize="15sp" />
 
