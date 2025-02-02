@@ -161,7 +161,8 @@ class MainActivity : AppCompatActivity() {
 
     fun addContentToPDF(input: String) {
         // Specify your desired directory path
-        val directory = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        val directory = "/Internal storage/Download/"
+
         val file = File(directory, "notes.pdf")
 
         if (!file.exists()) {
@@ -300,11 +301,11 @@ class MainActivity : AppCompatActivity() {
             backChat()
             instructionStart(false)
         }
-        else if (result.contains(notesKeyword, ignoreCase = true)){
-            instructionStart(true)
-            addNotes()
-            instructionStart(false)
-        }
+//        else if (result.contains(notesKeyword, ignoreCase = true)){
+//            instructionStart(true)
+//            addNotes()
+//            instructionStart(false)
+//        }
 //        else if (result.contains(clearScreenKeyword, ignoreCase = true)){
 //            instructionStart(true)
 //            clearScreen()
@@ -527,6 +528,7 @@ class MainActivity : AppCompatActivity() {
             }
             else {
                 inputText.setText("Input cancelled")
+                defineImage(null.toString())
             }
 
 
