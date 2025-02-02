@@ -1,4 +1,4 @@
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
@@ -7,16 +7,9 @@
     android:orientation="vertical"
     tools:context=".MainActivity">
 
-    <!-- Background Overlay (visible only when needed) -->
-    <View
-        android:id="@+id/overlay"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:background="@android:color/black"
-        android:visibility="gone" />
-
     <!-- Waiting Instructions TextView -->
     <TextView
+        android:layout_marginTop="20dp"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:gravity="center"
@@ -31,30 +24,54 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="Waiting for Instructions"
+        android:background="@drawable/round"
+        android:layout_marginTop="50dp"
+        android:layout_marginLeft="50dp"
+        android:layout_marginRight="50dp"
         android:padding="16dp"
         android:textSize="18sp"
         android:textColor="@android:color/white" />
 
     <!-- inputText (bordered) -->
+
     <TextView
         android:id="@+id/inputText"
         android:layout_width="match_parent"
         android:layout_height="93dp"
+        android:layout_marginTop="110dp"
         android:layout_marginBottom="16dp"
         android:background="@drawable/border"
         android:padding="16dp"
         android:text=""
         android:textColor="@android:color/white"
         android:textSize="16sp" />
-
     <!-- Output TextView (bordered) -->
+
     <TextView
         android:id="@+id/outputText"
         android:layout_width="match_parent"
-        android:layout_height="477dp"
-        android:text=""
-        android:padding="16dp"
+        android:layout_height="590dp"
+        android:layout_gravity="bottom|end"
         android:background="@drawable/border"
-        android:textSize="16sp"
-        android:textColor="@android:color/white" />
-</LinearLayout>
+        android:padding="16dp"
+        android:text=""
+        android:textColor="@android:color/white"
+        android:textSize="16sp" />
+
+    <ImageView
+        android:id="@+id/imageView"
+        android:layout_marginBottom="3dp"
+        android:layout_width="match_parent"
+        android:layout_height="200dp"
+        android:layout_gravity="center|bottom"
+        android:scaleType="fitCenter" />
+
+    <!-- Background Overlay (visible only when needed) -->
+    <View
+        android:id="@+id/overlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@android:color/black"
+        android:visibility="gone" />
+
+</FrameLayout>

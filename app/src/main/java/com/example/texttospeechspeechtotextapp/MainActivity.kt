@@ -20,6 +20,7 @@ import androidx.core.content.ContextCompat
 import java.util.Locale
 import android.Manifest
 import android.util.Log
+import android.widget.ImageView
 import kotlin.system.exitProcess
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -31,15 +32,25 @@ import kotlinx.coroutines.*
 import retrofit2.http.Query
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
+import coil.load
+import okhttp3.OkHttpClient
+import java.util.concurrent.TimeUnit
 
 
 private val RECORD_AUDIO_PERMISSION_CODE = 1
 
 @Serializable
 data class InternalJson(
-    val text: String
+    val text: String,
+    val image: String
 //    val sources: List<String>
 )
+
+class Entry(inputIn:String, outputIn:String, imgIn:String) {
+    val input: String = inputIn
+    val output: String = outputIn
+    val img: String = imgIn
+}
 
 class MainActivity : AppCompatActivity() {
     private lateinit var textToSpeech: TextToSpeech
@@ -48,7 +59,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var outputText: TextView
     private lateinit var overlayView: View
     private lateinit var speechRecognizer: SpeechRecognizer
-    private val listenKeyword = "hello"
+    private val listenKeyword = "buddy"
     private val screenOnKeyword = "wake"
     private val screenOffKeyword = "sleep"
     private val clearScreenKeyword = "clear"
@@ -60,7 +71,7 @@ class MainActivity : AppCompatActivity() {
     private var countingJob: Job? = null
     private var apiJob: Job? = null
 
-    private var myMutableList = mutableListOf<Pair<String, String>>()
+    private var myMutableList = mutableListOf<Entry>()
     private var currPage = 0
 
 
@@ -93,7 +104,7 @@ class MainActivity : AppCompatActivity() {
         speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
         checkAndRequestAudioPermission()
 
-        countingFunc()
+        countingFunc("🔇  Waiting for audio")
 
     }
 
@@ -137,11 +148,12 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun countingFunc() {
+    private fun countingFunc(input:String) {
+        if (instructionInProgress) return
         countingJob?.cancel()
         countingJob = GlobalScope.launch(Dispatchers.Main) {
             while (true){
-                var instr = "Waiting for audio"
+                var instr = input
                 for (i in 1..3) {
                     delay(500) // Delay for 1 second
                     instr = "$instr."
@@ -200,22 +212,23 @@ class MainActivity : AppCompatActivity() {
             instructionText.text = ("⚙\uFE0F  Processing  ⚙\uFE0F ")
         }
         else {
-            countingFunc()
+            countingFunc("🔇  Waiting for audio")
         }
     }
 
     private fun checkListening(input: Boolean){
         if (input) {
             countingJob?.cancel()
-            instructionText.text = ("\uD83C\uDFA7  Listening  \uD83C\uDFA7")
+            instructionText.text = ("\uD83C\uDFA7  Listening ")
         }
         else {
-            countingFunc()
+            countingFunc("🔇  Waiting for audio")
         }
     }
 
     private fun consider (result: String){
         if (result.contains(listenKeyword, ignoreCase = true)) {
+            if (instructionInProgress) return
             instructionStart(true)
             startFullSpeechRecognition()
         }
@@ -256,19 +269,29 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun backChat() {
-        if (currPage == 0) return
         currPage--
+        changeChat()
     }
 
     private fun nextChat() {
-        if (currPage == myMutableList.size) return
         currPage++
+        changeChat()
         
     }
     
     private fun changeChat(){
-        inputText.text = myMutableList[currPage-1].second
-        outputText.text = myMutableList[currPage-1].second
+        if (currPage < 1) {
+            currPage = 1
+            return
+        }
+        else if (currPage > myMutableList.size -1){
+            currPage = myMutableList.size -1
+            return
+        }
+        inputText.text = "Input heard: " + myMutableList[currPage-1].input
+        outputText.text = myMutableList[currPage-1].output
+
+        if (myMutableList[currPage-1].img.isNotEmpty()) defineImage(myMutableList[currPage-1].img)
     }
 
     private fun clearScreen(){
@@ -367,8 +390,15 @@ class MainActivity : AppCompatActivity() {
         result.launch(intent)
     }
 
+    val okHttpClient = OkHttpClient.Builder()
+        .connectTimeout(30, TimeUnit.SECONDS)  // Set the connection timeout
+        .readTimeout(30, TimeUnit.SECONDS)     // Set the read timeout
+        .writeTimeout(30, TimeUnit.SECONDS)    // Set the write timeout
+        .build()
+
     val retrofit = Retrofit.Builder()
-        .baseUrl("https://silent-bread-0929.grantoyt.workers.dev/")
+        .baseUrl("https://buddy.grantoyt.workers.dev/")
+        .client(okHttpClient)
         .addConverterFactory(
             Json.asConverterFactory(
                 "application/json; charset=UTF8".toMediaType()))
@@ -400,14 +430,24 @@ class MainActivity : AppCompatActivity() {
                 val output = apiService.getData(userInput)
                 outputText.text = output.text
 
+                if (output.image.isNotEmpty()) {
+                    Log.d("image", "image is attempting render")
+                    defineImage(output.image)
+                }
+
                 currPage++
-                myMutableList.add(Pair<String, String>(userInput, output.text))
+                myMutableList.add(Entry(userInput, output.text, output.image))
             } catch (e: CancellationException) {
                 Log.d("API_CALL", "API request was cancelled")
             } catch (e: Exception) {
                 Log.e("API_CALL", "API request failed: ${e.message}")
+
+                outputText.text= "API Error- Try again!"
             }
+            instructionStart(false)
+            countingFunc("🔇  Waiting for audio")
         }
+
     }
 
     @OptIn(DelicateCoroutinesApi::class)
@@ -415,8 +455,10 @@ class MainActivity : AppCompatActivity() {
         if (result.resultCode == Activity.RESULT_OK) {
             val results = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS) as ArrayList<String>
             if (!results[0].contains(doneKeyword)) {
-                inputText.setText("Input heard: " + results[0] + "\n Currently contacting server")
-                instructionText.text = "\uD83D\uDD52  Waiting for response  \uD83D\uDD52"
+                inputText.setText("Input heard: " + results[0])
+                instructionInProgress = false
+                countingFunc("\uD83D\uDD52  Waiting for response")
+                instructionInProgress = true
                 makeApiCall(results[0])
 
             }
@@ -435,6 +477,19 @@ class MainActivity : AppCompatActivity() {
 
         }
         startKeywordListening() // Restart listening after recognition
+    }
+
+    private fun defineImage(imageURLIn: String){
+        Log.d("ImageLoad", "Attempting to load image: $imageURLIn")
+        val imageView: ImageView = findViewById(R.id.imageView)
+
+        imageView.load(imageURLIn) {
+
+            crossfade(true)
+            listener(onError = { _, throwable ->
+                Log.e("CoilError", "Error loading image: ${imageURLIn}")
+            })
+        }
     }
 
 }
