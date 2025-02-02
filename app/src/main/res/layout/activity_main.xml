@@ -1,4 +1,3 @@
-<?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
@@ -8,6 +7,7 @@
     android:orientation="vertical"
     tools:context=".MainActivity">
 
+    <!-- Background Overlay (visible only when needed) -->
     <View
         android:id="@+id/overlay"
         android:layout_width="match_parent"
@@ -15,23 +15,36 @@
         android:background="@android:color/black"
         android:visibility="gone" />
 
-    <EditText
+    <!-- Waiting Instructions TextView -->
+    <TextView
+        android:id="@+id/instructionText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Waiting for Instructions"
+        android:padding="16dp"
+        android:textSize="18sp"
+        android:textColor="@android:color/white" />
+
+    <!-- EditText (bordered) -->
+    <TextView
         android:id="@+id/editText"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:hint="Enter the text"
-        android:inputType="text" />
+        android:layout_height="218dp"
+        android:text=""
+        android:padding="16dp"
+        android:background="@drawable/border"
+        android:layout_marginBottom="16dp"
+        android:textSize="16sp"
+        android:textColor="@android:color/white" />
 
-    <Button
-        android:id="@+id/textToSpeechBtn"
+    <!-- Output TextView (bordered) -->
+    <TextView
+        android:id="@+id/outputText"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Text To Speech" />
-    <Button
-        android:id="@+id/speechToTextBtn"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Speech To Text" />
-
-
+        android:layout_height="477dp"
+        android:text="Output here"
+        android:padding="16dp"
+        android:background="@drawable/border"
+        android:textSize="16sp"
+        android:textColor="@android:color/white" />
 </LinearLayout>

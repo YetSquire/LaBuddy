@@ -11,8 +11,7 @@ import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.view.View
-import android.widget.Button
-import android.widget.EditText
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -21,17 +20,34 @@ import androidx.core.content.ContextCompat
 import java.util.Locale
 import android.Manifest
 import kotlin.system.exitProcess
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.encodeToString
+import okhttp3.MediaType.Companion.toMediaType
+import retrofit2.Retrofit
+import retrofit2.converter.kotlinx.serialization.asConverterFactory
+import retrofit2.http.GET
+import kotlinx.coroutines.*
+import retrofit2.http.Query
+
 
 private val RECORD_AUDIO_PERMISSION_CODE = 1
 
+@Serializable
+data class InternalJson(val instruction: String)
+
 class MainActivity : AppCompatActivity() {
     private lateinit var textToSpeech: TextToSpeech
-    private lateinit var editText: EditText
+    private lateinit var editText: TextView
+    private lateinit var instructionText: TextView
+    private lateinit var outputText: TextView
     private lateinit var overlayView: View
     private lateinit var speechRecognizer: SpeechRecognizer
     private val listenKeyword = "hello"
+    private val screenOnKeyword = "wake"
     private val screenOffKeyword = "clear"
     private val doneKeyword = "exit"
+    private  var instructionInProgress = false
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -41,8 +57,10 @@ class MainActivity : AppCompatActivity() {
 
         editText = findViewById(R.id.editText)
 
-        val textToSpeechBtn = findViewById<Button>(R.id.textToSpeechBtn)
-        val speechToTextBtn = findViewById<Button>(R.id.speechToTextBtn)
+        outputText = findViewById(R.id.outputText)
+
+        instructionText = findViewById(R.id.instructionText)
+
         overlayView = findViewById<View>(R.id.overlay)
 
         // Initialize TextToSpeech
@@ -53,19 +71,6 @@ class MainActivity : AppCompatActivity() {
                     Toast.makeText(this, "Language is not supported", Toast.LENGTH_LONG).show()
                 }
             }
-        }
-
-
-        textToSpeechBtn.setOnClickListener {
-            if (editText.text.toString().trim().isNotEmpty()) {
-                textToSpeech.speak(editText.text.toString().trim(), TextToSpeech.QUEUE_FLUSH, null, null)
-            } else {
-                Toast.makeText(this, "Required", Toast.LENGTH_LONG).show()
-            }
-        }
-
-        speechToTextBtn.setOnClickListener {
-            startFullSpeechRecognition()
         }
 
         // Initialize continuous speech recognition
@@ -126,6 +131,7 @@ class MainActivity : AppCompatActivity() {
 
         // Hide everything by making the overlay visible
         overlayView.visibility = View.VISIBLE
+        instructionInProgress = false
 
     }
 
@@ -155,18 +161,22 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun consider (result: String){
-        printMessage(result)
         if (result.contains(listenKeyword, ignoreCase = true)) {
+            instructionInProgress = true
             startFullSpeechRecognition()
-            return
         }
-        if (result.contains(screenOffKeyword, ignoreCase = true)) {
+        else if (result.contains(screenOffKeyword, ignoreCase = true)) {
+            instructionInProgress = true
             hideAllUI()
-            return
         }
-        if (result.contains(doneKeyword, ignoreCase = true)){
+        else if (result.contains(doneKeyword, ignoreCase = true)){
+            instructionInProgress = true
             stopListening()
-            return
+        }
+        else if (result.contains(screenOnKeyword, ignoreCase = true)){
+            instructionInProgress = true
+            showAllUI()
+            instructionInProgress = false
         }
     }
 
@@ -182,6 +192,7 @@ class MainActivity : AppCompatActivity() {
         val intent = Intent(this, MainActivity::class.java)
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         startActivity(intent)
+        instructionInProgress = false
     }
 
 
@@ -195,7 +206,6 @@ class MainActivity : AppCompatActivity() {
 
         speechRecognizer.setRecognitionListener(object : RecognitionListener {
             override fun onReadyForSpeech(params: Bundle?) {}
-            override fun onRmsChanged(rmsdB: Float) {}
             override fun onBufferReceived(buffer: ByteArray?) {}
             override fun onEndOfSpeech() { }
 
@@ -229,9 +239,37 @@ class MainActivity : AppCompatActivity() {
                 startKeywordListening()
             }
 
+            private var lastCheckTime: Long = System.currentTimeMillis() // To keep track of the last check time
+            private val delayMillis: Long = 1500 // 500 milliseconds (0.5 second) delay
+
+            override fun onRmsChanged(rmsdB: Float) {
+                if (instructionInProgress) {
+                    instructionText.text = "Processing..."
+                    return
+                }
+
+                val currentTime = System.currentTimeMillis()-lastCheckTime
+                if (currentTime < delayMillis) {
+                    if ((currentTime % 500).toInt() == 0) {
+                        instructionText.text = "Waiting for audio."
+                    }
+                    else if ((currentTime % 500).toInt() == 1) {
+                        instructionText.text = "Waiting for audio.."
+                    }
+                    else if ((currentTime % 500).toInt() == 2) {
+                        instructionText.text = "Waiting for audio..."
+                    }
+                    else {
+                        lastCheckTime = System.currentTimeMillis()
+                    }
+                }
+            }
+
 
             override fun onEvent(eventType: Int, params: Bundle?) {}
         })
+
+
 
         speechRecognizer.startListening(intent)
     }
@@ -241,18 +279,50 @@ class MainActivity : AppCompatActivity() {
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
-            putExtra(RecognizerIntent.EXTRA_PROMPT, "Say something")
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 2000)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 2000)  // Increase the minimum length)
         }
 
         result.launch(intent)
     }
 
+    val retrofit = Retrofit.Builder()
+        .baseUrl("https://example.com/")
+        .addConverterFactory(
+            Json.asConverterFactory(
+                "application/json; charset=UTF8".toMediaType()))
+        .build()
+
+    // Create an instance of your API service
+    private val apiService = retrofit.create(ApiService::class.java)
+
+    interface ApiService {
+
+        @GET("your-endpoint-here")
+        suspend fun getData(
+            @Query("query") userInput: String,
+        ): InternalJson
+    }
+
+    @OptIn(DelicateCoroutinesApi::class)
     private val result = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result: androidx.activity.result.ActivityResult ->
         if (result.resultCode == Activity.RESULT_OK) {
             val results = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS) as ArrayList<String>
-            editText.setText(results[0])
+            editText.setText("Input heard: " + results[0] + "\n Currently contacting server")
+
+//            val send = InternalJson(results[0])
+//
+//            // Serialize to JSON string
+//            val jsonString = Json.encodeToString(send)
+
+            GlobalScope.launch(Dispatchers.Main) {
+                val output = apiService.getData(userInput = results[0])
+                outputText.text = output.instruction
+            }
         }
         startKeywordListening() // Restart listening after recognition
+        instructionInProgress = false
     }
 
 }
