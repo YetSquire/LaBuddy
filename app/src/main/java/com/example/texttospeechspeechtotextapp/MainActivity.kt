@@ -19,6 +19,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import java.util.Locale
 import android.Manifest
+import android.util.Log
 import kotlin.system.exitProcess
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -28,16 +29,21 @@ import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import retrofit2.http.GET
 import kotlinx.coroutines.*
 import retrofit2.http.Query
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 
 
 private val RECORD_AUDIO_PERMISSION_CODE = 1
 
 @Serializable
-data class InternalJson(val instruction: String)
+data class InternalJson(
+    val text: String
+//    val sources: List<String>
+)
 
 class MainActivity : AppCompatActivity() {
     private lateinit var textToSpeech: TextToSpeech
-    private lateinit var editText: TextView
+    private lateinit var inputText: TextView
     private lateinit var instructionText: TextView
     private lateinit var outputText: TextView
     private lateinit var overlayView: View
@@ -46,9 +52,16 @@ class MainActivity : AppCompatActivity() {
     private val screenOnKeyword = "wake"
     private val screenOffKeyword = "sleep"
     private val clearScreenKeyword = "clear"
-    private val doneKeyword = "exit"
+    private val doneKeyword = "cancel"
+    private val nextKeyword = "next"
+    private val backKeyword = "back"
+
     private  var instructionInProgress = false
     private var countingJob: Job? = null
+    private var apiJob: Job? = null
+
+    private var myMutableList = mutableListOf<Pair<String, String>>()
+    private var currPage = 0
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -56,7 +69,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
         supportActionBar?.hide()
 
-        editText = findViewById(R.id.editText)
+        inputText = findViewById(R.id.inputText)
 
         outputText = findViewById(R.id.outputText)
 
@@ -139,8 +152,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun printMessage(message: String) {
-        editText.append(message)
-        editText.append(" ")
+        inputText.append(message)
+        inputText.append(" ")
     }
 
     private fun hideAllUI() {
@@ -184,7 +197,7 @@ class MainActivity : AppCompatActivity() {
         instructionInProgress = input
         if (instructionInProgress) {
             countingJob?.cancel()
-            instructionText.text = ("Processing")
+            instructionText.text = ("⚙\uFE0F  Processing  ⚙\uFE0F ")
         }
         else {
             countingFunc()
@@ -194,7 +207,7 @@ class MainActivity : AppCompatActivity() {
     private fun checkListening(input: Boolean){
         if (input) {
             countingJob?.cancel()
-            instructionText.text = ("Listening")
+            instructionText.text = ("\uD83C\uDFA7  Listening  \uD83C\uDFA7")
         }
         else {
             countingFunc()
@@ -202,7 +215,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun consider (result: String){
-        outputText.append(result);
         if (result.contains(listenKeyword, ignoreCase = true)) {
             instructionStart(true)
             startFullSpeechRecognition()
@@ -216,6 +228,8 @@ class MainActivity : AppCompatActivity() {
         else if (result.contains(doneKeyword, ignoreCase = true)){
             instructionStart(true)
             stopListening()
+            cancelApiCall()
+            inputText.text = "Input cancelled"
             instructionStart(false)
         }
         else if (result.contains(screenOnKeyword, ignoreCase = true)){
@@ -223,17 +237,43 @@ class MainActivity : AppCompatActivity() {
             showAllUI()
             instructionStart(false)
         }
-        else if (result.contains(clearScreenKeyword, ignoreCase = true)){
+        else if (result.contains(nextKeyword, ignoreCase = true)){
             instructionStart(true)
-            clearScreen()
+            nextChat()
             instructionStart(false)
         }
+        else if (result.contains(backKeyword, ignoreCase = true)){
+            instructionStart(true)
+            backChat()
+            instructionStart(false)
+        }
+//        else if (result.contains(clearScreenKeyword, ignoreCase = true)){
+//            instructionStart(true)
+//            clearScreen()
+//            instructionStart(false)
+//        }
 
+    }
+
+    private fun backChat() {
+        if (currPage == 0) return
+        currPage--
+    }
+
+    private fun nextChat() {
+        if (currPage == myMutableList.size) return
+        currPage++
+        
+    }
+    
+    private fun changeChat(){
+        inputText.text = myMutableList[currPage-1].second
+        outputText.text = myMutableList[currPage-1].second
     }
 
     private fun clearScreen(){
         outputText.text = ""
-        editText.text = "Input heard: "
+        inputText.text = "Input heard: "
     }
 
     private fun stopListening() {
@@ -262,7 +302,7 @@ class MainActivity : AppCompatActivity() {
             override fun onReadyForSpeech(params: Bundle?) {}
             override fun onBufferReceived(buffer: ByteArray?) {}
 
-            override fun onBeginningOfSpeech() { checkListening(true)  }
+            override fun onBeginningOfSpeech() { if (!instructionInProgress) checkListening(true)  }
 
             @SuppressLint("SetTextI18n")
             override fun onResults(results: Bundle?) {
@@ -288,7 +328,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             override fun onEndOfSpeech() {
-                checkListening(false)
+                if (!instructionInProgress) checkListening(false)
                startKeywordListening()
             }
 
@@ -322,14 +362,13 @@ class MainActivity : AppCompatActivity() {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 50)
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 50)
         }
 
         result.launch(intent)
     }
 
     val retrofit = Retrofit.Builder()
-        .baseUrl("https://example.com/")
+        .baseUrl("https://silent-bread-0929.grantoyt.workers.dev/")
         .addConverterFactory(
             Json.asConverterFactory(
                 "application/json; charset=UTF8".toMediaType()))
@@ -340,24 +379,49 @@ class MainActivity : AppCompatActivity() {
 
     interface ApiService {
 
-        @GET("your-endpoint-here")
+        @GET("?")
         suspend fun getData(
             @Query("query") userInput: String,
         ): InternalJson
     }
 
+    private fun encodeQuery(query: String): String {
+        return URLEncoder.encode(query, StandardCharsets.UTF_8.toString())
+    }
+
+    private fun cancelApiCall() {
+        apiJob?.cancel()
+    }
+
+    fun makeApiCall(userInput: String) {
+        cancelApiCall()
+        apiJob = CoroutineScope(Dispatchers.Main).launch {
+            try {
+                val output = apiService.getData(userInput)
+                outputText.text = output.text
+
+                currPage++
+                myMutableList.add(Pair<String, String>(userInput, output.text))
+            } catch (e: CancellationException) {
+                Log.d("API_CALL", "API request was cancelled")
+            } catch (e: Exception) {
+                Log.e("API_CALL", "API request failed: ${e.message}")
+            }
+        }
+    }
+
     @OptIn(DelicateCoroutinesApi::class)
     private val result = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result: androidx.activity.result.ActivityResult ->
-        instructionStart(false)
         if (result.resultCode == Activity.RESULT_OK) {
             val results = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS) as ArrayList<String>
-            if (!results[0].contains("exit")) {
-                editText.setText("Input heard: " + results[0] + "\n Currently contacting server")
-//                GlobalScope.launch(Dispatchers.Main) {
-//                    val output = apiService.getData(userInput = results[0])
-//                    outputText.text = output.instruction
-//                }
+            if (!results[0].contains(doneKeyword)) {
+                inputText.setText("Input heard: " + results[0] + "\n Currently contacting server")
+                instructionText.text = "\uD83D\uDD52  Waiting for response  \uD83D\uDD52"
+                makeApiCall(results[0])
 
+            }
+            else {
+                inputText.setText("Input cancelled")
             }
 
 

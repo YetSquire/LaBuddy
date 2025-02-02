@@ -18,15 +18,16 @@
     <!-- Waiting Instructions TextView -->
     <TextView
         android:layout_width="match_parent"
-        android:layout_height="29dp"
-        android:padding="16dp"
-        android:text="Available instructions: Hello, Exit, Wake, Sleep, Clear"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:text="Options: (Hello, Cancel) (Wake, Sleep) (Next, Back)"
         android:textColor="@android:color/white"
-        android:textSize="18sp" />
+        android:textSize="15sp" />
 
     <!-- Waiting Instructions TextView -->
     <TextView
         android:id="@+id/instructionText"
+        android:gravity="center"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="Waiting for Instructions"
@@ -34,24 +35,24 @@
         android:textSize="18sp"
         android:textColor="@android:color/white" />
 
-    <!-- EditText (bordered) -->
+    <!-- inputText (bordered) -->
     <TextView
-        android:id="@+id/editText"
+        android:id="@+id/inputText"
         android:layout_width="match_parent"
-        android:layout_height="218dp"
-        android:text=""
-        android:padding="16dp"
-        android:background="@drawable/border"
+        android:layout_height="93dp"
         android:layout_marginBottom="16dp"
-        android:textSize="16sp"
-        android:textColor="@android:color/white" />
+        android:background="@drawable/border"
+        android:padding="16dp"
+        android:text=""
+        android:textColor="@android:color/white"
+        android:textSize="16sp" />
 
     <!-- Output TextView (bordered) -->
     <TextView
         android:id="@+id/outputText"
         android:layout_width="match_parent"
         android:layout_height="477dp"
-        android:text="Output here"
+        android:text=""
         android:padding="16dp"
         android:background="@drawable/border"
         android:textSize="16sp"
